@@ -2,7 +2,9 @@
 
 A community-maintained web application for computing and comparing the **preference-weighted metabolizable energy (e_p)** of plant forage species for ungulates.
 
-**Live app:** [https://gsinchanpostdoc.github.io/forage-energy-db/](https://gsinchanpostdoc.github.io/forage-energy-db/)
+**Live app:** [https://gsinchanpostdoc.github.io/Forage-energy-content-meta-database/](https://gsinchanpostdoc.github.io/Forage-energy-content-meta-database/)
+
+**Google Site:** [Energy Content in Forage](https://sites.google.com/view/sinchan-ghosh/metadatabases/energy-content-in-forage)
 
 ## The Model
 
@@ -38,24 +40,17 @@ The database ships with moose (*Alces alces*) data for 6 plant categories across
 
 This is a **zero-build, single-file application**. No Node.js, npm, or build step required.
 
-### GitHub Pages
+The `index.html` file contains the entire app. Simply enable GitHub Pages (Settings → Pages → main branch / root) and it is live.
 
-1. Fork or clone this repo
-2. Go to **Settings → Pages**
-3. Set source to **Deploy from a branch → main → / (root)**
-4. Your app is live at `https://<username>.github.io/forage-energy-db/`
-
-### Google Sites
-
-Embed via iframe — see deployment instructions in the repo wiki.
+It is also embedded in the Google Site at [Metadatabases → Energy Content in Forage](https://sites.google.com/view/sinchan-ghosh/metadatabases/energy-content-in-forage).
 
 ## Variables
 
 | Variable | Description | Unit |
 |----------|-------------|------|
-| CP | Crude Protein (digestible fraction, Menke et al.) | g/100g DM |
-| NSC | Non-Structural Carbohydrate (digestible fraction) | g/100g DM |
-| Lipids | Lipids (digestible fraction) | g/100g DM |
+| CP | Crude Protein — digestible fraction (Menke et al.) | g/100g DM |
+| NSC | Non-Structural Carbohydrate — digestible fraction | g/100g DM |
+| Lipids | Lipids — digestible fraction | g/100g DM |
 | Fibre | Total fibre content | g/100g DM |
 | dNDF% | Percentage of NDF that is digestible | % |
 | dNDF | Digestible Neutral Detergent Fibre | g/100g DM |
@@ -75,8 +70,8 @@ Embed via iframe — see deployment instructions in the repo wiki.
 
 ## Links
 
-- [Deer Foraging Metadatabase (Google Site)](https://sites.google.com/view/sinchan-ghosh/deer-foraging-metadatabase)
-- [GitHub](https://github.com/gsinchanpostdoc)
+- [Energy Content in Forage (Google Site)](https://sites.google.com/view/sinchan-ghosh/metadatabases/energy-content-in-forage)
+- [Sinchan Ghosh — Main Site](https://sites.google.com/view/sinchan-ghosh)
 
 ## Contact
 

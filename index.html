@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Forage Energy Database — Animal Forage Metabolizable Energy & Preference Index</title>
+<meta name="description" content="Community database for computing preference-weighted metabolizable energy (e_p) of plant forage species for ungulates. Menke et al. energy coefficients × Jacobs D preference index." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #080f0b; }
+  input, select, textarea, button { font-family: inherit; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 0.4; }
+  a { transition: opacity 0.2s; }
+  a:hover { opacity: 0.8; }
+  table tr:hover { background: rgba(74,154,96,0.05); }
+  ::selection { background: rgba(74,154,96,0.3); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: rgba(10,20,14,0.3); }
+  ::-webkit-scrollbar-thumb { background: rgba(74,154,96,0.25); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+/* ═══ STORAGE LAYER (localStorage for GitHub Pages) ═══ */
+const DB_KEY = "forage_energy_community_db";
+function loadCommunityDB() {
+  try { return JSON.parse(localStorage.getItem(DB_KEY) || "[]"); }
+  catch { return []; }
+}
+function saveCommunityDB(data) {
+  try { localStorage.setItem(DB_KEY, JSON.stringify(data)); }
+  catch (e) { console.error("Storage error:", e); }
+}
+
+/* ═══ CONSTANTS & DATA ═══ */
+const MENKE = { CP: 15.2, NSC: 15.9, Lipids: 34.2, dNDF: 12.8 };
+const SEASONS = ["Spring", "Summer", "Autumn", "Winter"];
+const SEASON_ICONS = { Spring: "🌱", Summer: "☀️", Autumn: "🍂", Winter: "❄️" };
+
+const MOOSE_PLANTS = {
+  Broadleaf:        { CP: 7.5537, NSC: 5.9685, Lipids: 1.413,  Fibre: 57.063, dNDF_pct: 21.085 },
+  "Common juniper": { CP: 6.8,    NSC: 8.5,    Lipids: 3.1,    Fibre: 42.6,   dNDF_pct: 19.7 },
+  Pine:             { CP: 9.2,    NSC: 10.1,   Lipids: 4.1,    Fibre: 43.1,   dNDF_pct: 21.3 },
+  Shrub:            { CP: 6.47,   NSC: 12.53,  Lipids: 2.07,   Fibre: 46.16,  dNDF_pct: 21.26 },
+  Spruce:           { CP: 8.2,    NSC: 15.8,   Lipids: 2.0,    Fibre: 40.1,   dNDF_pct: 20.8 },
+  Bilberry:         { CP: 6.1,    NSC: 11.3,   Lipids: 1.5,    Fibre: 49.0,   dNDF_pct: 20.2 },
+};
+
+const MOOSE_JACOBS = {
+  Spring: { Broadleaf: 0.3, "Common juniper": 0.6, Pine: 0.9, Shrub: -0.4, Spruce: -0.9, Bilberry: -0.3 },
+  Summer: { Broadleaf: 5.0, "Common juniper": 0.2, Pine: 0.5, Shrub: -0.4, Spruce: -0.9, Bilberry: 0.0 },
+  Autumn: { Broadleaf: 0.6, "Common juniper": -0.4, Pine: 0.1, Shrub: -0.4, Spruce: -0.95, Bilberry: 0.1 },
+  Winter: { Broadleaf: -0.2, "Common juniper": 0.4, Pine: 0.9, Shrub: 0.0, Spruce: -0.8, Bilberry: 0.0 },
+};
+
+const MOOSE_PREF = {
+  Spring: { Broadleaf: 0.65, "Common juniper": 0.80, Pine: 0.95, Shrub: 0.30, Spruce: 0.05, Bilberry: 0.35 },
+  Summer: { Broadleaf: 3.00, "Common juniper": 0.60, Pine: 0.75, Shrub: 0.30, Spruce: 0.05, Bilberry: 0.50 },
+  Autumn: { Broadleaf: 0.80, "Common juniper": 0.30, Pine: 0.55, Shrub: 0.30, Spruce: 0.025, Bilberry: 0.55 },
+  Winter: { Broadleaf: 0.40, "Common juniper": 0.70, Pine: 0.95, Shrub: 0.50, Spruce: 0.10, Bilberry: 0.50 },
+};
+
+function calcME(chem) {
+  const dNDF = chem.Fibre * chem.dNDF_pct / 100;
+  return MENKE.CP * chem.CP + MENKE.NSC * chem.NSC + MENKE.Lipids * chem.Lipids + MENKE.dNDF * dNDF;
+}
+
+function buildMooseDB() {
+  const records = [];
+  for (const season of SEASONS) {
+    for (const [plant, chem] of Object.entries(MOOSE_PLANTS)) {
+      const me = calcME(chem);
+      const jd = MOOSE_JACOBS[season][plant];
+      const pi = MOOSE_PREF[season][plant];
+      records.push({
+        id: "moose_"+season+"_"+plant, animal: "Moose (Alces alces)",
+        plant, season, ...chem, dNDF: chem.Fibre * chem.dNDF_pct / 100,
+        ME: me, jacobsD: jd, prefIndex: pi, ep: me * pi,
+        source: "Pre-loaded", addedBy: "System", timestamp: "2024-01-01",
+      });
+    }
+  }
+  return records;
+}
+const MOOSE_DB = buildMooseDB();
+
+/* ═══ STYLES ═══ */
+const S = {
+  root: { minHeight: "100vh", background: "linear-gradient(170deg, #080f0b 0%, #0e1a12 30%, #132118 60%, #0a140e 100%)", color: "#cddacd", fontFamily: "'Source Serif 4', Georgia, serif" },
+  container: { maxWidth: 940, margin: "0 auto", padding: "0 20px 60px" },
+  accent: "#4a9a60", dim: "#5a7a60", dimmer: "#3a5a42",
+  bg1: "rgba(18,32,22,0.85)", border1: "rgba(74,154,96,0.2)", border2: "rgba(74,154,96,0.12)",
+  mono: "'IBM Plex Mono', Consolas, monospace",
+  input: { width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(74,154,96,0.25)", background: "rgba(8,15,11,0.7)", color: "#c8e8d0", fontSize: 14, fontFamily: "'IBM Plex Mono', monospace", outline: "none", boxSizing: "border-box" },
+  btn: (active) => ({ padding: "8px 18px", borderRadius: 8, border: "1px solid "+(active ? "#4a9a60" : "rgba(74,154,96,0.2)"), background: active ? "rgba(74,154,96,0.22)" : "rgba(74,154,96,0.05)", color: active ? "#b8e8c0" : "#6a9a70", cursor: "pointer", fontSize: 14, fontWeight: active ? 600 : 400, transition: "all 0.2s", fontFamily: "'Source Serif 4', serif" }),
+  tag: (c) => ({ display: "inline-block", padding: "2px 10px", borderRadius: 12, background: c+"18", border: "1px solid "+c+"33", fontSize: 11, letterSpacing: 1, fontFamily: "'IBM Plex Mono', monospace" }),
+};
+
+/* ═══ MAIN APP ═══ */
+function ForageDB() {
+  const [tab, setTab] = useState("database");
+  const [communityData, setCommunityData] = useState(() => loadCommunityDB());
+
+  const allData = useMemo(() => [...MOOSE_DB, ...communityData], [communityData]);
+
+  const addCommunityRecords = useCallback((newRecords) => {
+    const updated = [...communityData, ...newRecords];
+    setCommunityData(updated);
+    saveCommunityDB(updated);
+  }, [communityData]);
+
+  const tabs = [
+    { id: "database", label: "📊 Database" },
+    { id: "calculator", label: "🧮 Calculator" },
+    { id: "contribute", label: "➕ Contribute" },
+    { id: "about", label: "ℹ️ About" },
+  ];
+
+  return (
+    <div style={S.root}>
+      <div style={{ position: "fixed", inset: 0, opacity: 0.02, backgroundImage: "radial-gradient(circle at 30% 40%, #4a9a60 1px, transparent 1px)", backgroundSize: "50px 50px", pointerEvents: "none" }} />
+
+      {/* HEADER */}
+      <header style={{ background: "rgba(8,15,11,0.95)", borderBottom: "1px solid rgba(74,154,96,0.15)", padding: "16px 20px", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
+        <div style={{ maxWidth: 940, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#d8f0dc", letterSpacing: -0.3 }}>🌿 Forage Energy Database</div>
+            <div style={{ fontSize: 11, fontFamily: S.mono, color: S.dim, letterSpacing: 1.5 }}>Animal Forage Metabolizable Energy & Preference Index</div>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <a href="https://github.com/gsinchanpostdoc/Forage-energy-content-meta-database" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(74,154,96,0.2)", background: "rgba(74,154,96,0.06)", color: "#7aba80", fontSize: 12, fontFamily: S.mono, textDecoration: "none" }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              GitHub
+            </a>
+            <a href="https://sites.google.com/view/sinchan-ghosh/metadatabases/energy-content-in-forage" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(74,154,96,0.2)", background: "rgba(74,154,96,0.06)", color: "#7aba80", fontSize: 12, fontFamily: S.mono, textDecoration: "none" }}>
+              🌐 Energy Content in Forage
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* NAV */}
+      <nav style={{ maxWidth: 940, margin: "0 auto", padding: "16px 20px 0", display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ ...S.btn(tab === t.id), borderBottom: tab === t.id ? "2px solid #4a9a60" : "2px solid transparent", borderRadius: "8px 8px 0 0", paddingBottom: 10 }}>
+            {t.label}
+          </button>
+        ))}
+        <div style={{ marginLeft: "auto", fontSize: 12, fontFamily: S.mono, color: S.dimmer, alignSelf: "center" }}>
+          {allData.length} records · {new Set(allData.map(d => d.animal)).size} species
+        </div>
+      </nav>
+
+      <div style={S.container}>
+        {tab === "database" && <DatabaseTab data={allData} />}
+        {tab === "calculator" && <CalculatorTab />}
+        {tab === "contribute" && <ContributeTab onAdd={addCommunityRecords} />}
+        {tab === "about" && <AboutTab />}
+      </div>
+    </div>
+  );
+}
+
+/* ═══ DATABASE TAB ═══ */
+function DatabaseTab({ data }) {
+  const [filterAnimal, setFilterAnimal] = useState("all");
+  const [filterSeason, setFilterSeason] = useState("all");
+  const [sortKey, setSortKey] = useState("ep");
+  const [sortDir, setSortDir] = useState("desc");
+  const animals = useMemo(() => [...new Set(data.map(d => d.animal))], [data]);
+  const filtered = useMemo(() => {
+    let d = [...data];
+    if (filterAnimal !== "all") d = d.filter(r => r.animal === filterAnimal);
+    if (filterSeason !== "all") d = d.filter(r => r.season === filterSeason);
+    d.sort((a, b) => sortDir === "desc" ? (b[sortKey]||0) - (a[sortKey]||0) : (a[sortKey]||0) - (b[sortKey]||0));
+    return d;
+  }, [data, filterAnimal, filterSeason, sortKey, sortDir]);
+  const toggleSort = (k) => { if (sortKey === k) setSortDir(d => d === "desc" ? "asc" : "desc"); else { setSortKey(k); setSortDir("desc"); } };
+  const maxEp = Math.max(...filtered.map(r => r.ep||0), 1);
+
+  return (
+    <div style={{ paddingTop: 20 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20, alignItems: "center" }}>
+        <span style={{ fontSize: 12, fontFamily: S.mono, color: S.dim, letterSpacing: 1 }}>FILTER:</span>
+        <select value={filterAnimal} onChange={e => setFilterAnimal(e.target.value)} style={{ ...S.input, width: "auto", minWidth: 180 }}>
+          <option value="all">All Species</option>
+          {animals.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={filterSeason} onChange={e => setFilterSeason(e.target.value)} style={{ ...S.input, width: "auto", minWidth: 120 }}>
+          <option value="all">All Seasons</option>
+          {SEASONS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <span style={{ marginLeft: "auto", fontSize: 12, fontFamily: S.mono, color: S.dimmer }}>{filtered.length} records</span>
+      </div>
+      <div style={{ overflowX: "auto", background: S.bg1, border: "1px solid "+S.border1, borderRadius: 12 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 800 }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid "+S.border1 }}>
+              {[{k:"animal",l:"Animal"},{k:"plant",l:"Plant"},{k:"season",l:"Season"},{k:"ME",l:"ME"},{k:"jacobsD",l:"Jacobs D"},{k:"prefIndex",l:"Pref. Index"},{k:"ep",l:"e_p"},{k:"source",l:"Source"}].map(c => (
+                <th key={c.k} onClick={() => toggleSort(c.k)} style={{ padding: "10px 10px", textAlign: ["ME","jacobsD","prefIndex","ep"].includes(c.k) ? "right" : "left", color: sortKey===c.k ? "#b8e8c0" : S.dim, fontFamily: S.mono, fontSize: 11, fontWeight: 600, cursor: "pointer", letterSpacing: 0.5, userSelect: "none", whiteSpace: "nowrap" }}>
+                  {c.l} {sortKey===c.k ? (sortDir==="desc" ? "↓" : "↑") : ""}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={r.id||i} style={{ borderBottom: "1px solid "+S.border2 }}>
+                <td style={{ padding: "8px 10px", fontWeight: 500, color: "#b8d8c0", maxWidth: 160 }}>{r.animal}</td>
+                <td style={{ padding: "8px 10px", color: "#90b898" }}>{r.plant}</td>
+                <td style={{ padding: "8px 10px", color: "#8aaa8e" }}>{SEASON_ICONS[r.season]} {r.season}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: S.mono, color: "#88aa90", fontSize: 12 }}>{r.ME?.toFixed(1)}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: S.mono, fontSize: 12, color: r.jacobsD > 0 ? "#70c080" : r.jacobsD < 0 ? "#c08070" : "#88aa88" }}>{r.jacobsD?.toFixed(2)}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", fontFamily: S.mono, color: "#90b8a0", fontSize: 12 }}>{r.prefIndex?.toFixed(3)}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                    <div style={{ width: 60, height: 12, background: "rgba(10,20,14,0.5)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: Math.max(2,(r.ep/maxEp)*100)+"%", background: "linear-gradient(90deg, #4a9a6066, #4a9a6022)", borderRadius: 2 }} />
+                    </div>
+                    <span style={{ fontFamily: S.mono, fontWeight: 600, fontSize: 13, color: r.ep > maxEp*0.6 ? "#90e0a0" : "#88aa90" }}>{r.ep?.toFixed(1)}</span>
+                  </div>
+                </td>
+                <td style={{ padding: "8px 10px", fontSize: 11, color: S.dimmer, fontFamily: S.mono }}>{r.source}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: S.dimmer, fontFamily: S.mono }}>No records match</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ CALCULATOR TAB ═══ */
+function CalculatorTab() {
+  const [vals, setVals] = useState({ CP: "", NSC: "", Lipids: "", Fibre: "", dNDF_pct: "", prefIndex: "" });
+  const set = (k, v) => setVals(p => ({ ...p, [k]: v }));
+  const chem = useMemo(() => {
+    const c = {};
+    for (const k of ["CP","NSC","Lipids","Fibre","dNDF_pct"]) c[k] = vals[k] !== "" && !isNaN(Number(vals[k])) ? Number(vals[k]) : null;
+    return c;
+  }, [vals]);
+  const me = useMemo(() => Object.values(chem).some(v => v === null) ? null : calcME(chem), [chem]);
+  const pi = vals.prefIndex !== "" && !isNaN(Number(vals.prefIndex)) ? Number(vals.prefIndex) : null;
+  const ep = me !== null && pi !== null ? me * pi : null;
+
+  return (
+    <div style={{ paddingTop: 20 }}>
+      <div style={{ background: S.bg1, border: "1px solid "+S.border1, borderRadius: 14, padding: "24px 28px" }}>
+        <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>Metabolizable Energy Calculator</div>
+        <p style={{ fontSize: 14, color: "#8aaa8e", marginBottom: 20, lineHeight: 1.6 }}>Enter plant chemistry to compute ME (Menke et al.: 15.2×CP + 15.9×NSC + 34.2×Lipids + 12.8×dNDF), then multiply by Preference Index for e_p.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 24 }}>
+          {[{k:"CP",l:"Crude Protein",u:"g/100g DM"},{k:"NSC",l:"Non-Structural Carbohydrate",u:"g/100g DM"},{k:"Lipids",l:"Lipids",u:"g/100g DM"},{k:"Fibre",l:"Fibre",u:"g/100g DM"},{k:"dNDF_pct",l:"Digestible NDF Fraction",u:"%"}].map(f => (
+            <div key={f.k}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <label style={{ fontSize: 12, color: "#8ab890", fontWeight: 500 }}>{f.l}</label>
+                <span style={{ fontSize: 10, fontFamily: S.mono, color: S.dimmer }}>{f.u}</span>
+              </div>
+              <input type="number" step="any" value={vals[f.k]} onChange={e => set(f.k, e.target.value)} style={S.input} />
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "16px 20px", borderRadius: 10, background: "rgba(74,154,96,0.06)", border: "1px solid "+S.border1, textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontFamily: S.mono, letterSpacing: 2, color: S.dim, marginBottom: 6 }}>METABOLIZABLE ENERGY</div>
+          <div style={{ fontSize: 36, fontWeight: 700, fontFamily: S.mono, color: me !== null ? "#c8f0d0" : "#553333" }}>{me !== null ? me.toFixed(2) : "—"}</div>
+          <div style={{ fontSize: 11, fontFamily: S.mono, color: S.dim }}>MJ/kg dry biomass</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 16, alignItems: "end" }}>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Preference Index (ranked Jacobs D)</label>
+            <input type="number" step="any" placeholder="e.g. 0.75" value={vals.prefIndex} onChange={e => set("prefIndex", e.target.value)} style={S.input} />
+          </div>
+          <div style={{ fontSize: 24, color: S.dim, paddingBottom: 6 }}>→</div>
+          <div style={{ padding: "14px 18px", borderRadius: 10, background: ep !== null ? "rgba(74,154,96,0.12)" : "rgba(80,40,40,0.08)", border: "1px solid "+(ep !== null ? S.border1 : "rgba(170,85,85,0.2)"), textAlign: "center" }}>
+            <div style={{ fontSize: 10, fontFamily: S.mono, letterSpacing: 2, color: S.dim, marginBottom: 4 }}>e_p</div>
+            <div style={{ fontSize: 30, fontWeight: 700, fontFamily: S.mono, color: ep !== null ? "#c8f0d0" : "#664444" }}>{ep !== null ? ep.toFixed(2) : "—"}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ CONTRIBUTE TAB ═══ */
+function ContributeTab({ onAdd }) {
+  const [mode, setMode] = useState(null);
+  return (
+    <div style={{ paddingTop: 20 }}>
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 500, color: "#d8f0dc", marginBottom: 8 }}>Contribute to the Database</h2>
+        <p style={{ fontSize: 14, color: "#8aaa8e", maxWidth: 600, margin: "0 auto", lineHeight: 1.6 }}>Help expand the forage energy database to new animal species.</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 28 }}>
+        <button onClick={() => setMode("request")} style={{ padding: "28px 24px", borderRadius: 14, border: "2px solid "+(mode==="request" ? S.accent : S.border1), background: mode==="request" ? "rgba(74,154,96,0.12)" : S.bg1, cursor: "pointer", textAlign: "left" }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📧</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: "#c8e8d0", marginBottom: 6 }}>Option A: Request Data Analysis</div>
+          <div style={{ fontSize: 13, color: "#7a9a7e", lineHeight: 1.5 }}>Tell us which animal and forages you need. We will compile the data.</div>
+          <div style={{ marginTop: 12, ...S.tag("#4a9a60"), color: S.accent }}>Sends email request</div>
+        </button>
+        <button onClick={() => setMode("manual")} style={{ padding: "28px 24px", borderRadius: 14, border: "2px solid "+(mode==="manual" ? S.accent : S.border1), background: mode==="manual" ? "rgba(74,154,96,0.12)" : S.bg1, cursor: "pointer", textAlign: "left" }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📝</div>
+          <div style={{ fontSize: 17, fontWeight: 600, color: "#c8e8d0", marginBottom: 6 }}>Option B: Enter Data Directly</div>
+          <div style={{ fontSize: 13, color: "#7a9a7e", lineHeight: 1.5 }}>Provide all values yourself. Records are added to the shared database.</div>
+          <div style={{ marginTop: 12, ...S.tag("#4a9a60"), color: S.accent }}>Updates database live</div>
+        </button>
+      </div>
+      {mode === "request" && <RequestForm />}
+      {mode === "manual" && <ManualEntryForm onAdd={onAdd} />}
+    </div>
+  );
+}
+
+function RequestForm() {
+  const [animal, setAnimal] = useState("");
+  const [forages, setForages] = useState("");
+  const [anyForage, setAnyForage] = useState(false);
+  const [sent, setSent] = useState(false);
+  const subject = "Data request for " + (animal || "[Animal name]");
+  const body = "Hello,\n\nI would like to request forage energy data for:\n\nAnimal: "+(animal||"[Please specify]")+"\n\nForage species:\n"+(anyForage ? "Any forage possible for this species" : (forages||"[Please list]"))+"\n\nThank you.";
+  const mailto = "mailto:sinchanghosh110@gmail.com?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+
+  return (
+    <div style={{ background: S.bg1, border: "1px solid "+S.border1, borderRadius: 14, padding: "24px 28px" }}>
+      <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>📧 Request Data Analysis</div>
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: "block", fontSize: 13, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Animal Species Name *</label>
+        <input type="text" placeholder="e.g. White-tailed deer (Odocoileus virginianus)" value={animal} onChange={e => setAnimal(e.target.value)} style={S.input} />
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, color: "#8ab890", fontWeight: 500 }}>Forage Species</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: S.dim, cursor: "pointer" }}>
+            <input type="checkbox" checked={anyForage} onChange={e => setAnyForage(e.target.checked)} style={{ accentColor: S.accent }} /> Any forage possible
+          </label>
+        </div>
+        {!anyForage && <textarea rows={4} placeholder="List forage species, one per line" value={forages} onChange={e => setForages(e.target.value)} style={{ ...S.input, resize: "vertical", lineHeight: 1.6 }} />}
+      </div>
+      <div style={{ padding: "16px 18px", borderRadius: 10, background: "rgba(8,15,11,0.6)", border: "1px solid "+S.border2, marginBottom: 18 }}>
+        <div style={{ fontSize: 10, fontFamily: S.mono, letterSpacing: 1.5, color: S.dimmer, marginBottom: 8 }}>EMAIL PREVIEW</div>
+        <div style={{ fontSize: 12, fontFamily: S.mono, color: "#6a9a70", marginBottom: 4 }}>To: sinchanghosh110@gmail.com</div>
+        <div style={{ fontSize: 12, fontFamily: S.mono, color: "#8ab890", marginBottom: 8 }}>Subject: {subject}</div>
+        <div style={{ fontSize: 12, color: "#7a9a7e", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{body}</div>
+      </div>
+      <a href={mailto} onClick={() => setSent(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", borderRadius: 10, background: animal ? "rgba(74,154,96,0.2)" : "rgba(74,154,96,0.06)", border: "1px solid "+(animal ? S.accent : S.border1), color: animal ? "#b8e8c0" : S.dim, textDecoration: "none", fontSize: 15, fontWeight: 600, cursor: animal ? "pointer" : "not-allowed" }}>
+        📧 Open in Mail Client
+      </a>
+      {sent && <div style={{ marginTop: 12, padding: "8px 14px", borderRadius: 8, background: "rgba(74,154,96,0.08)", border: "1px solid "+S.border1, fontSize: 13, color: S.accent, fontFamily: S.mono }}>✓ Mail client opened</div>}
+    </div>
+  );
+}
+
+function ManualEntryForm({ onAdd }) {
+  const empty = { animal: "", plant: "", season: "Winter", CP: "", NSC: "", Lipids: "", Fibre: "", dNDF_pct: "", jacobsD: "", prefIndex: "", source: "", addedBy: "" };
+  const [form, setForm] = useState(empty);
+  const [entries, setEntries] = useState([]);
+  const [saved, setSaved] = useState(false);
+  const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setSaved(false); };
+  const chem = useMemo(() => {
+    const c = {};
+    for (const k of ["CP","NSC","Lipids","Fibre","dNDF_pct"]) c[k] = form[k] !== "" && !isNaN(Number(form[k])) ? Number(form[k]) : null;
+    return c;
+  }, [form]);
+  const me = useMemo(() => Object.values(chem).some(v => v === null) ? null : calcME(chem), [chem]);
+  const pi = form.prefIndex !== "" && !isNaN(Number(form.prefIndex)) ? Number(form.prefIndex) : null;
+  const ep = me !== null && pi !== null ? me * pi : null;
+  const canAdd = form.animal && form.plant && form.season && me !== null && pi !== null;
+
+  const addEntry = () => {
+    if (!canAdd) return;
+    const record = { id: "community_"+Date.now()+"_"+Math.random().toString(36).slice(2,8), animal: form.animal, plant: form.plant, season: form.season, ...chem, dNDF: chem.Fibre*chem.dNDF_pct/100, ME: me, jacobsD: form.jacobsD !== "" ? Number(form.jacobsD) : null, prefIndex: pi, ep, source: form.source||"Community", addedBy: form.addedBy||"Anonymous", timestamp: new Date().toISOString().slice(0,10) };
+    setEntries(prev => [...prev, record]);
+    setForm(p => ({ ...empty, animal: p.animal, addedBy: p.addedBy, source: p.source }));
+  };
+  const saveAll = () => { if (entries.length===0) return; onAdd(entries); setSaved(true); setEntries([]); };
+
+  return (
+    <div style={{ background: S.bg1, border: "1px solid "+S.border1, borderRadius: 14, padding: "24px 28px" }}>
+      <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>📝 Enter Data Directly</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+        <div><label style={{ display: "block", fontSize: 12, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Animal Species *</label><input type="text" placeholder="e.g. Red deer" value={form.animal} onChange={e => set("animal",e.target.value)} style={S.input} /></div>
+        <div><label style={{ display: "block", fontSize: 12, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Plant / Forage *</label><input type="text" placeholder="e.g. Scots pine" value={form.plant} onChange={e => set("plant",e.target.value)} style={S.input} /></div>
+        <div><label style={{ display: "block", fontSize: 12, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Season *</label><select value={form.season} onChange={e => set("season",e.target.value)} style={S.input}>{SEASONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+      </div>
+      <div style={{ fontSize: 10, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.dim, marginBottom: 8 }}>Plant Chemistry</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+        {[{k:"CP",l:"Crude Protein"},{k:"NSC",l:"Non-Structural Carb."},{k:"Lipids",l:"Lipids"},{k:"Fibre",l:"Fibre"},{k:"dNDF_pct",l:"Digestible NDF %"}].map(f => (
+          <div key={f.k}><label style={{ display: "block", fontSize: 11, color: "#8ab890", marginBottom: 3 }}>{f.l}</label><input type="number" step="any" value={form[f.k]} onChange={e => set(f.k,e.target.value)} style={S.input} /></div>
+        ))}
+      </div>
+      {me !== null && <div style={{ padding: "10px 16px", borderRadius: 8, background: "rgba(74,154,96,0.06)", border: "1px solid "+S.border2, marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 11, fontFamily: S.mono, color: S.dim }}>ME:</span><span style={{ fontSize: 18, fontWeight: 700, fontFamily: S.mono, color: "#c8f0d0" }}>{me.toFixed(2)}</span><span style={{ fontSize: 11, fontFamily: S.mono, color: S.dimmer }}>MJ/kg DM</span></div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <div><label style={{ display: "block", fontSize: 11, color: "#8ab890", marginBottom: 3 }}>Jacobs D (optional)</label><input type="number" step="any" placeholder="-1 to +1" value={form.jacobsD} onChange={e => set("jacobsD",e.target.value)} style={S.input} /></div>
+        <div><label style={{ display: "block", fontSize: 11, color: "#8ab890", marginBottom: 3 }}>Preference Index *</label><input type="number" step="any" placeholder="e.g. 0.75" value={form.prefIndex} onChange={e => set("prefIndex",e.target.value)} style={S.input} /></div>
+      </div>
+      {ep !== null && <div style={{ padding: "14px 18px", borderRadius: 10, background: "rgba(74,154,96,0.1)", border: "1px solid "+S.border1, marginBottom: 16, textAlign: "center" }}><span style={{ fontSize: 11, fontFamily: S.mono, color: S.dim }}>e_p = {me.toFixed(2)} × {pi.toFixed(3)} = </span><span style={{ fontSize: 26, fontWeight: 700, fontFamily: S.mono, color: "#c8f0d0" }}>{ep.toFixed(2)}</span></div>}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+        <div><label style={{ display: "block", fontSize: 11, color: "#8ab890", marginBottom: 3 }}>Data Source</label><input type="text" placeholder="e.g. Smith et al. 2023" value={form.source} onChange={e => set("source",e.target.value)} style={S.input} /></div>
+        <div><label style={{ display: "block", fontSize: 11, color: "#8ab890", marginBottom: 3 }}>Your Name</label><input type="text" placeholder="Anonymous" value={form.addedBy} onChange={e => set("addedBy",e.target.value)} style={S.input} /></div>
+      </div>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={addEntry} disabled={!canAdd} style={{ padding: "10px 24px", borderRadius: 10, border: "1px solid "+(canAdd ? S.accent : S.border2), background: canAdd ? "rgba(74,154,96,0.18)" : "rgba(74,154,96,0.04)", color: canAdd ? "#b8e8c0" : S.dimmer, cursor: canAdd ? "pointer" : "not-allowed", fontSize: 14, fontWeight: 600 }}>+ Add to Batch</button>
+        {entries.length > 0 && <button onClick={saveAll} style={{ padding: "10px 24px", borderRadius: 10, border: "2px solid "+S.accent, background: "rgba(74,154,96,0.22)", color: "#c8f0d0", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Save {entries.length} Record{entries.length>1?"s":""}</button>}
+        {saved && <span style={{ fontSize: 13, fontFamily: S.mono, color: S.accent }}>✓ Saved!</span>}
+      </div>
+      {entries.length > 0 && <div style={{ marginTop: 18, padding: "14px 16px", borderRadius: 10, background: "rgba(8,15,11,0.5)", border: "1px solid "+S.border2 }}>
+        <div style={{ fontSize: 10, fontFamily: S.mono, letterSpacing: 2, color: S.dim, marginBottom: 8 }}>BATCH ({entries.length})</div>
+        {entries.map((r,i) => <div key={i} style={{ display: "flex", gap: 10, justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid "+S.border2, fontSize: 12, fontFamily: S.mono }}><span style={{ color: "#90b898" }}>{r.animal}</span><span style={{ color: "#7a9a7e" }}>{r.plant} · {r.season}</span><span style={{ color: "#c8f0d0", fontWeight: 600 }}>e_p={r.ep.toFixed(1)}</span><button onClick={() => setEntries(p => p.filter((_,j) => j!==i))} style={{ background: "none", border: "none", color: "#c07060", cursor: "pointer" }}>✕</button></div>)}
+      </div>}
+    </div>
+  );
+}
+
+/* ═══ ABOUT TAB ═══ */
+function AboutTab() {
+  return (
+    <div style={{ paddingTop: 20, maxWidth: 700 }}>
+      <div style={{ background: S.bg1, border: "1px solid "+S.border1, borderRadius: 14, padding: "28px 32px" }}>
+        <h2 style={{ fontSize: 22, fontWeight: 600, color: "#d8f0dc", marginBottom: 16 }}>About This Database</h2>
+        <p style={{ fontSize: 14, color: "#8aaa8e", lineHeight: 1.7, marginBottom: 16 }}>Community-maintained resource for computing preference-weighted metabolizable energy of plant forage for ungulates.</p>
+        <div style={{ padding: "14px 18px", borderRadius: 10, background: "rgba(8,15,11,0.5)", border: "1px solid "+S.border2, marginBottom: 20, textAlign: "center" }}>
+          <div style={{ fontSize: 16, fontFamily: S.mono, color: "#a8d8b0", lineHeight: 2 }}><strong>e<sub>p</sub></strong> = ME × Preference Index</div>
+          <div style={{ fontSize: 13, fontFamily: S.mono, color: S.dim }}>ME = 15.2×CP + 15.9×NSC + 34.2×Lipids + 12.8×dNDF</div>
+          <div style={{ fontSize: 12, fontFamily: S.mono, color: S.dimmer, marginTop: 4 }}>dNDF = Fibre × (% digestible NDF) / 100</div>
+        </div>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "#b8d8c0", marginBottom: 8 }}>Variables</h3>
+        <div style={{ display: "grid", gap: 6, marginBottom: 20 }}>
+          {[["CP","Crude Protein — digestible fraction (Menke et al.)"],["NSC","Non-Structural Carbohydrate (Menke et al.)"],["Lipids","Lipids — digestible fraction (Menke et al.)"],["Fibre","Total fibre in plant dry matter"],["dNDF","Digestible Neutral Detergent Fibre"],["ME","Metabolizable Energy (MJ/kg DM)"],["Jacobs D","Selectivity index (-1 to +1)"],["Pref. Index","Ranked Jacobs D weight"],["e_p","Preference-weighted energy content"]].map(([t,d]) => (
+            <div key={t} style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: 8, padding: "5px 10px", borderRadius: 6, background: "rgba(8,15,11,0.4)", fontSize: 12 }}>
+              <span style={{ fontFamily: S.mono, color: "#90c8a0", fontWeight: 600 }}>{t}</span>
+              <span style={{ color: "#7a9a7e" }}>{d}</span>
+            </div>
+          ))}
+        </div>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "#b8d8c0", marginBottom: 8 }}>References</h3>
+        <div style={{ fontSize: 12, color: "#6a9a70", lineHeight: 1.8, marginBottom: 20 }}>Menke et al. — ME coefficients. Jacobs (1974) — Selectivity index. Shipley (1998, 1999) — Moose digestibility. Dungan (2010) — Energy expenditure. Wam (2010) — Seasonal diet. Renecker & Hudson (1992) — BMR.</div>
+        <div style={{ padding: "16px 18px", borderRadius: 10, background: "rgba(74,154,96,0.06)", border: "1px solid "+S.border1 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: "#a8d8b0", marginBottom: 8 }}>Links</h3>
+          <a href="https://github.com/gsinchanpostdoc/Forage-energy-content-meta-database" target="_blank" rel="noopener noreferrer" style={{ display: "block", color: "#7aba80", fontSize: 13, fontFamily: S.mono, marginBottom: 4 }}>GitHub Repository</a>
+          <a href="https://sites.google.com/view/sinchan-ghosh/metadatabases/energy-content-in-forage" target="_blank" rel="noopener noreferrer" style={{ display: "block", color: "#7aba80", fontSize: 13, fontFamily: S.mono }}>Energy Content in Forage (Google Site)</a>
+        </div>
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid "+S.border2, fontSize: 12, color: S.dimmer, fontFamily: S.mono }}>Maintained by Sinchan Ghosh · sinchanghosh110@gmail.com</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<ForageDB />, document.getElementById("root"));
+</script>
+</body>
+</html>
