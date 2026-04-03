@@ -43,7 +43,7 @@ function saveCommunityDB(data) {
 /* ═══ CONSTANTS & DATA ═══ */
 const MENKE = { CP: 15.2, NSC: 15.9, Lipids: 34.2, dNDF: 12.8 };
 const SEASONS = ["Spring", "Summer", "Autumn", "Winter"];
-const SEASON_ICONS = { Spring: "🌱", Summer: "☀️", Autumn: "🍂", Winter: "❄️" };
+const SEASON_ICONS = { Spring: "", Summer: "", Autumn: "", Winter: "" };
 
 const MOOSE_PLANTS = {
   Broadleaf:        { CP: 7.5537, NSC: 5.9685, Lipids: 1.413,  Fibre: 57.063, dNDF_pct: 21.085 },
@@ -118,10 +118,10 @@ function ForageDB() {
   }, [communityData]);
 
   const tabs = [
-    { id: "database", label: "📊 Database" },
-    { id: "calculator", label: "🧮 Calculator" },
-    { id: "contribute", label: "➕ Contribute" },
-    { id: "about", label: "ℹ️ About" },
+    { id: "database", label: "Database" },
+    { id: "calculator", label: "Calculator" },
+    { id: "contribute", label: "Contribute" },
+    { id: "about", label: "About" },
   ];
 
   return (
@@ -132,7 +132,7 @@ function ForageDB() {
       <header style={{ background: "rgba(8,15,11,0.95)", borderBottom: "1px solid rgba(74,154,96,0.15)", padding: "16px 20px", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
         <div style={{ maxWidth: 940, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "#d8f0dc", letterSpacing: -0.3 }}>🌿 Forage Energy Database</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#d8f0dc", letterSpacing: -0.3 }}>Forage Energy Database</div>
             <div style={{ fontSize: 11, fontFamily: S.mono, color: S.dim, letterSpacing: 1.5 }}>Animal Forage Metabolizable Energy & Preference Index</div>
           </div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -141,7 +141,7 @@ function ForageDB() {
               GitHub
             </a>
             <a href="https://sites.google.com/view/sinchan-ghosh/metadatabases/energy-content-in-forage" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(74,154,96,0.2)", background: "rgba(74,154,96,0.06)", color: "#7aba80", fontSize: 12, fontFamily: S.mono, textDecoration: "none" }}>
-              🌐 Energy Content in Forage
+              Energy Content in Forage
             </a>
           </div>
         </div>
@@ -300,13 +300,13 @@ function ContributeTab({ onAdd }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginBottom: 28 }}>
         <button onClick={() => setMode("request")} style={{ padding: "28px 24px", borderRadius: 14, border: "2px solid "+(mode==="request" ? S.accent : S.border1), background: mode==="request" ? "rgba(74,154,96,0.12)" : S.bg1, cursor: "pointer", textAlign: "left" }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>📧</div>
+          
           <div style={{ fontSize: 17, fontWeight: 600, color: "#c8e8d0", marginBottom: 6 }}>Option A: Request Data Analysis</div>
           <div style={{ fontSize: 13, color: "#7a9a7e", lineHeight: 1.5 }}>Tell us which animal and forages you need. We will compile the data.</div>
           <div style={{ marginTop: 12, ...S.tag("#4a9a60"), color: S.accent }}>Sends email request</div>
         </button>
         <button onClick={() => setMode("manual")} style={{ padding: "28px 24px", borderRadius: 14, border: "2px solid "+(mode==="manual" ? S.accent : S.border1), background: mode==="manual" ? "rgba(74,154,96,0.12)" : S.bg1, cursor: "pointer", textAlign: "left" }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>📝</div>
+          
           <div style={{ fontSize: 17, fontWeight: 600, color: "#c8e8d0", marginBottom: 6 }}>Option B: Enter Data Directly</div>
           <div style={{ fontSize: 13, color: "#7a9a7e", lineHeight: 1.5 }}>Provide all values yourself. Records are added to the shared database.</div>
           <div style={{ marginTop: 12, ...S.tag("#4a9a60"), color: S.accent }}>Updates database live</div>
@@ -329,7 +329,7 @@ function RequestForm() {
 
   return (
     <div style={{ background: S.bg1, border: "1px solid "+S.border1, borderRadius: 14, padding: "24px 28px" }}>
-      <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>📧 Request Data Analysis</div>
+      <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>Request Data Analysis</div>
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: "block", fontSize: 13, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Animal Species Name *</label>
         <input type="text" placeholder="e.g. White-tailed deer (Odocoileus virginianus)" value={animal} onChange={e => setAnimal(e.target.value)} style={S.input} />
@@ -350,7 +350,7 @@ function RequestForm() {
         <div style={{ fontSize: 12, color: "#7a9a7e", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{body}</div>
       </div>
       <a href={mailto} onClick={() => setSent(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", borderRadius: 10, background: animal ? "rgba(74,154,96,0.2)" : "rgba(74,154,96,0.06)", border: "1px solid "+(animal ? S.accent : S.border1), color: animal ? "#b8e8c0" : S.dim, textDecoration: "none", fontSize: 15, fontWeight: 600, cursor: animal ? "pointer" : "not-allowed" }}>
-        📧 Open in Mail Client
+        Open in Mail Client
       </a>
       {sent && <div style={{ marginTop: 12, padding: "8px 14px", borderRadius: 8, background: "rgba(74,154,96,0.08)", border: "1px solid "+S.border1, fontSize: 13, color: S.accent, fontFamily: S.mono }}>✓ Mail client opened</div>}
     </div>
@@ -383,7 +383,7 @@ function ManualEntryForm({ onAdd }) {
 
   return (
     <div style={{ background: S.bg1, border: "1px solid "+S.border1, borderRadius: 14, padding: "24px 28px" }}>
-      <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>📝 Enter Data Directly</div>
+      <div style={{ fontSize: 11, fontFamily: S.mono, letterSpacing: 2, textTransform: "uppercase", color: S.accent, marginBottom: 16 }}>Enter Data Directly</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
         <div><label style={{ display: "block", fontSize: 12, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Animal Species *</label><input type="text" placeholder="e.g. Red deer" value={form.animal} onChange={e => set("animal",e.target.value)} style={S.input} /></div>
         <div><label style={{ display: "block", fontSize: 12, color: "#8ab890", fontWeight: 500, marginBottom: 4 }}>Plant / Forage *</label><input type="text" placeholder="e.g. Scots pine" value={form.plant} onChange={e => set("plant",e.target.value)} style={S.input} /></div>
@@ -407,7 +407,7 @@ function ManualEntryForm({ onAdd }) {
       </div>
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={addEntry} disabled={!canAdd} style={{ padding: "10px 24px", borderRadius: 10, border: "1px solid "+(canAdd ? S.accent : S.border2), background: canAdd ? "rgba(74,154,96,0.18)" : "rgba(74,154,96,0.04)", color: canAdd ? "#b8e8c0" : S.dimmer, cursor: canAdd ? "pointer" : "not-allowed", fontSize: 14, fontWeight: 600 }}>+ Add to Batch</button>
-        {entries.length > 0 && <button onClick={saveAll} style={{ padding: "10px 24px", borderRadius: 10, border: "2px solid "+S.accent, background: "rgba(74,154,96,0.22)", color: "#c8f0d0", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>💾 Save {entries.length} Record{entries.length>1?"s":""}</button>}
+        {entries.length > 0 && <button onClick={saveAll} style={{ padding: "10px 24px", borderRadius: 10, border: "2px solid "+S.accent, background: "rgba(74,154,96,0.22)", color: "#c8f0d0", cursor: "pointer", fontSize: 14, fontWeight: 700 }}>Save {entries.length} Record{entries.length>1?"s":""}</button>}
         {saved && <span style={{ fontSize: 13, fontFamily: S.mono, color: S.accent }}>✓ Saved!</span>}
       </div>
       {entries.length > 0 && <div style={{ marginTop: 18, padding: "14px 16px", borderRadius: 10, background: "rgba(8,15,11,0.5)", border: "1px solid "+S.border2 }}>
